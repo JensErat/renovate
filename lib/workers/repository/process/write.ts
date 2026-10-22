@@ -203,6 +203,7 @@ export async function writeUpdates(
 
         const res = await processBranch(branch);
         branch.prBlockedBy = res?.prBlockedBy;
+        branch.prAutomergeBlockReason = res?.prAutomergeBlockReason;
         branch.prNo = res?.prNo;
         branch.result = res?.result;
         branch.commitFingerprint = res?.updatesVerified

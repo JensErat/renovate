@@ -1847,6 +1847,77 @@ describe('workers/repository/update/branch/index', () => {
       expect(prAutomerge.checkAutoMerge).toHaveBeenCalledTimes(1);
     });
 
+    it('records and logs the automerge block reason', async () => {
+      getUpdated.getUpdatedPackageFiles.mockResolvedValueOnce(
+        partial<PackageFilesResult>({
+          updatedPackageFiles: [partial<FileChange>()],
+        }),
+      );
+      npmPostExtract.getAdditionalFiles.mockResolvedValueOnce({
+        artifactErrors: [],
+        updatedArtifacts: [partial<FileChange>()],
+      });
+      scm.branchExists.mockResolvedValue(true);
+      automerge.tryBranchAutomerge.mockResolvedValueOnce('failed');
+      prWorker.ensurePr.mockResolvedValueOnce({
+        type: 'with-pr',
+        pr: partial<Pr>({ number: 5, title: 'Update dependency foo' }),
+      });
+      prAutomerge.checkAutoMerge.mockResolvedValueOnce({
+        automerged: false,
+        branchStatus: 'yellow',
+        prAutomergeBlockReason: 'BranchNotGreen',
+      });
+      commit.commitFilesToBranch.mockResolvedValueOnce(null);
+
+      const res = await branchWorker.processBranch({
+        ...config,
+        automerge: true,
+      });
+
+      expect(res).toEqual({
+        branchExists: true,
+        prAutomergeBlockReason: 'BranchNotGreen',
+        prNo: 5,
+        result: 'done',
+        commitSha: null,
+      });
+      expect(logger.once.info).toHaveBeenCalledWith(
+        {
+          prNumber: 5,
+          prTitle: 'Update dependency foo',
+          prAutomergeBlockReason: 'BranchNotGreen',
+          branchStatus: 'yellow',
+        },
+        'PR #5 is configured for automerge but was not automerged',
+      );
+    });
+
+    it('skips automerge check when a commit was just pushed', async () => {
+      getUpdated.getUpdatedPackageFiles.mockResolvedValueOnce(
+        partial<PackageFilesResult>({
+          updatedPackageFiles: [partial<FileChange>()],
+        }),
+      );
+      npmPostExtract.getAdditionalFiles.mockResolvedValueOnce({
+        artifactErrors: [],
+        updatedArtifacts: [partial<FileChange>()],
+      });
+      scm.branchExists.mockResolvedValue(true);
+      automerge.tryBranchAutomerge.mockResolvedValueOnce('failed');
+      prWorker.ensurePr.mockResolvedValueOnce({
+        type: 'with-pr',
+        pr: partial<Pr>({ number: 5 }),
+      });
+
+      await branchWorker.processBranch({ ...config, automerge: true });
+
+      expect(prAutomerge.checkAutoMerge).not.toHaveBeenCalled();
+      expect(logger.debug).toHaveBeenCalledWith(
+        'Skipping automerge check for PR #5 because a commit was just pushed; checks must finish first',
+      );
+    });
+
     it('ensures PR when impossible to automerge with mismatch keepUpdatedLabel', async () => {
       getUpdated.getUpdatedPackageFiles.mockResolvedValueOnce(
         partial<PackageFilesResult>({

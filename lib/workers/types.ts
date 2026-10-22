@@ -136,6 +136,16 @@ export type PrBlockedBy =
   | 'RateLimited'
   | 'Error';
 
+export type PrAutomergeBlockReason =
+  | 'BranchModified'
+  | 'BranchNotGreen'
+  | 'Conflicted'
+  | 'DryRun'
+  | 'InMergeQueue'
+  | 'OffSchedule'
+  | 'PlatformNotReady'
+  | 'PlatformRejection';
+
 export type BranchResult =
   | 'already-existed'
   | 'automerged'
@@ -191,6 +201,7 @@ export interface BranchConfig
   upgrades: BranchUpgradeConfig[];
   packageFiles?: Record<string, PackageFile[]>;
   prBlockedBy?: PrBlockedBy;
+  prAutomergeBlockReason?: PrAutomergeBlockReason;
   prNo?: number;
   stabilityStatus?: BranchStatus;
   stopUpdating?: boolean;

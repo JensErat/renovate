@@ -79,7 +79,14 @@ function generateBranchUpgradeCache(
 async function generateBranchCache(
   branch: BranchConfig,
 ): Promise<BranchCache | null> {
-  const { baseBranch, branchName, prBlockedBy, prTitle, result } = branch;
+  const {
+    baseBranch,
+    branchName,
+    prAutomergeBlockReason,
+    prBlockedBy,
+    prTitle,
+    result,
+  } = branch;
   try {
     const branchSha = await scm.getBranchCommit(branchName);
     const baseBranchSha = await scm.getBranchCommit(baseBranch);
@@ -137,6 +144,7 @@ async function generateBranchCache(
       isConflicted,
       isModified,
       prBlockedBy,
+      prAutomergeBlockReason,
       pristine,
       prCache,
       prNo,

@@ -1208,19 +1208,30 @@ export async function getBranchStatus(
     'branch status check result',
   );
   if (commitStatus.statuses && !internalChecksAsSuccess) {
+    const statusCount = commitStatus.statuses.length;
     commitStatus.statuses = commitStatus.statuses.filter(
       (status) =>
         status.state !== 'success' || !status.context?.startsWith('renovate/'),
     );
-    // v8 ignore else -- TODO: add test #40625
     if (!commitStatus.statuses.length) {
-      logger.debug(
-        'Successful checks are all internal renovate/ checks, so returning "pending" branch status',
-      );
+      if (statusCount > 0) {
+        logger.debug(
+          'Successful checks are all internal renovate/ checks, so returning "pending" branch status',
+        );
+      } else {
+        logger.debug(
+          {
+            state: commitStatus.state,
+            totalCount: commitStatus.total_count,
+          },
+          'No commit statuses reported, so returning "pending" branch status',
+        );
+      }
       commitStatus.state = 'pending';
     }
   }
   let checkRuns: { name: string; status: string; conclusion: string }[] = [];
+  let checksReadable = true;
   // API is supported in oldest available GHE version 2.19
   try {
     const checkRunsUrl = `repos/${config.repository}/commits/${escapeHash(
@@ -1246,23 +1257,40 @@ export async function getBranchStatus(
         conclusion: run.conclusion,
       }));
       logger.debug({ checkRuns }, 'check runs result');
-    } /* v8 ignore next -- specs always mock a non-empty check_runs response */ else {
-      logger.debug({ result: checkRunsRaw }, 'No check runs found');
     }
-  } catch (err) /* v8 ignore next -- check-run permission errors (403) are mapped to empty results, not mocked in specs */ {
+  } catch (err) {
     if (err instanceof ExternalHostError) {
       throw err;
     }
+    checksReadable = false;
+    const acceptedPermissions =
+      err.response?.headers?.['x-accepted-github-permissions'];
     if (
       err.statusCode === 403 ||
+      err.statusCode === 404 ||
       err.message === PLATFORM_INTEGRATION_UNAUTHORIZED
     ) {
-      logger.debug('No permission to view check runs');
+      logger.once.warn(
+        {
+          statusCode: err.statusCode,
+          acceptedPermissions,
+          hint: 'A fine-grained token needs the "Checks: read" permission; a classic token needs the "repo" scope',
+        },
+        'Cannot read GitHub check runs - falling back to commit statuses; automerge may remain blocked',
+      );
     } else {
       logger.warn({ err }, 'Error retrieving check runs');
     }
   }
   if (checkRuns.length === 0) {
+    logger.debug(
+      {
+        state: commitStatus.state,
+        statusesCount: commitStatus.statuses?.length,
+        checksReadable,
+      },
+      'No check runs to evaluate - falling back to commit statuses',
+    );
     if (commitStatus.state === 'success') {
       return 'green';
     }

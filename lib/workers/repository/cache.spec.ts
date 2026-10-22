@@ -41,5 +41,22 @@ describe('workers/repository/cache', () => {
         depName: 'dep',
       });
     });
+    it('caches the automerge block reason', async () => {
+      const cache = partial<RepoCacheData>({});
+      repoCache.getCache.mockReturnValue(cache);
+      const branches = partial<BranchConfig[]>([
+        {
+          branchName: 'renovate/dep-1.x',
+          baseBranch: 'main',
+          manager: 'npm',
+          prAutomergeBlockReason: 'BranchNotGreen',
+          upgrades: [],
+        },
+      ]);
+
+      await setBranchCache(branches);
+
+      expect(cache.branches?.[0].prAutomergeBlockReason).toBe('BranchNotGreen');
+    });
   });
 });

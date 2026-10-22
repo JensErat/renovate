@@ -2586,6 +2586,9 @@ describe('modules/platform/github/index', () => {
       await github.initRepo({ repository: 'some/repo' });
       const res = await github.getBranchStatus('somebranch', false);
       expect(res).toBe('yellow');
+      expect(logger.logger.debug).toHaveBeenCalledWith(
+        'Successful checks are all internal renovate/ checks, so returning "pending" branch status',
+      );
     });
 
     it('should pass through failed', async () => {
@@ -2647,8 +2650,15 @@ describe('modules/platform/github/index', () => {
           ],
         });
       await github.initRepo({ repository: 'some/repo' });
-      const res = await github.getBranchStatus('somebranch', true);
+      const res = await github.getBranchStatus('somebranch', false);
       expect(res).toBe('red');
+      expect(logger.logger.debug).toHaveBeenCalledWith(
+        { state: 'pending', totalCount: undefined },
+        'No commit statuses reported, so returning "pending" branch status',
+      );
+      expect(logger.logger.debug).not.toHaveBeenCalledWith(
+        'Successful checks are all internal renovate/ checks, so returning "pending" branch status',
+      );
     });
 
     it('should succeed if no status and all passed check runs', async () => {
@@ -2718,6 +2728,131 @@ describe('modules/platform/github/index', () => {
       await github.initRepo({ repository: 'some/repo' });
       const res = await github.getBranchStatus('somebranch', true);
       expect(res).toBe('yellow');
+    });
+
+    it('warns when check runs cannot be read due to missing permissions', async () => {
+      const scope = httpMock.scope(githubApiHost);
+      initRepoMock(scope, 'some/repo');
+      scope
+        .get('/repos/some/repo/commits/somebranch/status')
+        .reply(200, {
+          state: 'pending',
+          statuses: [],
+        })
+        .get('/repos/some/repo/commits/somebranch/check-runs?per_page=100')
+        .reply(
+          403,
+          { message: 'Resource not accessible by personal access token' },
+          { 'x-accepted-github-permissions': 'checks=read' },
+        );
+
+      await github.initRepo({ repository: 'some/repo' });
+      const res = await github.getBranchStatus('somebranch', true);
+
+      expect(res).toBe('yellow');
+      expect(logger.logger.once.warn).toHaveBeenCalledWith(
+        {
+          statusCode: 403,
+          acceptedPermissions: 'checks=read',
+          hint: 'A fine-grained token needs the "Checks: read" permission; a classic token needs the "repo" scope',
+        },
+        'Cannot read GitHub check runs - falling back to commit statuses; automerge may remain blocked',
+      );
+    });
+
+    it('warns when the check runs endpoint is not available', async () => {
+      const scope = httpMock.scope(githubApiHost);
+      initRepoMock(scope, 'some/repo');
+      scope
+        .get('/repos/some/repo/commits/somebranch/status')
+        .reply(200, {
+          state: 'pending',
+          statuses: [],
+        })
+        .get('/repos/some/repo/commits/somebranch/check-runs?per_page=100')
+        .reply(404);
+
+      await github.initRepo({ repository: 'some/repo' });
+      const res = await github.getBranchStatus('somebranch', true);
+
+      expect(res).toBe('yellow');
+      expect(logger.logger.once.warn).toHaveBeenCalledWith(
+        {
+          statusCode: 404,
+          acceptedPermissions: undefined,
+          hint: 'A fine-grained token needs the "Checks: read" permission; a classic token needs the "repo" scope',
+        },
+        'Cannot read GitHub check runs - falling back to commit statuses; automerge may remain blocked',
+      );
+    });
+
+    it('warns when the GitHub integration is unauthorized', async () => {
+      const scope = httpMock.scope(githubApiHost);
+      initRepoMock(scope, 'some/repo');
+      scope
+        .get('/repos/some/repo/commits/somebranch/status')
+        .reply(200, {
+          state: 'pending',
+          statuses: [],
+        })
+        .get('/repos/some/repo/commits/somebranch/check-runs?per_page=100')
+        .reply(403, {
+          message: 'Resource not accessible by integration (403)',
+        });
+
+      await github.initRepo({ repository: 'some/repo' });
+      const res = await github.getBranchStatus('somebranch', true);
+
+      expect(res).toBe('yellow');
+      expect(logger.logger.once.warn).toHaveBeenCalledWith(
+        {
+          statusCode: undefined,
+          acceptedPermissions: undefined,
+          hint: 'A fine-grained token needs the "Checks: read" permission; a classic token needs the "repo" scope',
+        },
+        'Cannot read GitHub check runs - falling back to commit statuses; automerge may remain blocked',
+      );
+    });
+
+    it('logs unexpected check run errors', async () => {
+      const scope = httpMock.scope(githubApiHost);
+      initRepoMock(scope, 'some/repo');
+      scope
+        .get('/repos/some/repo/commits/somebranch/status')
+        .reply(200, {
+          state: 'pending',
+          statuses: [],
+        })
+        .get('/repos/some/repo/commits/somebranch/check-runs?per_page=100')
+        .reply(400);
+
+      await github.initRepo({ repository: 'some/repo' });
+      const res = await github.getBranchStatus('somebranch', true);
+
+      expect(res).toBe('yellow');
+      expect(logger.logger.warn).toHaveBeenCalledWith(
+        { err: expect.any(RequestError) },
+        'Error retrieving check runs',
+      );
+    });
+
+    it('rethrows external host errors from check runs', async () => {
+      const scope = httpMock.scope(githubApiHost);
+      initRepoMock(scope, 'some/repo');
+      scope
+        .get('/repos/some/repo/commits/somebranch/status')
+        .reply(200, {
+          state: 'pending',
+          statuses: [],
+        })
+        .get('/repos/some/repo/commits/somebranch/check-runs?per_page=100')
+        .reply(500);
+
+      await github.initRepo({ repository: 'some/repo' });
+
+      await expect(github.getBranchStatus('somebranch', true)).rejects.toThrow(
+        ExternalHostError,
+      );
     });
   });
 

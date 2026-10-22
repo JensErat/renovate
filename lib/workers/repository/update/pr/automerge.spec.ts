@@ -29,7 +29,11 @@ describe('workers/repository/update/pr/automerge', () => {
 
     it('should not automerge if off schedule', async () => {
       spy.mockReturnValueOnce(false);
-      await prAutomerge.checkAutoMerge(pr, config);
+      const res = await prAutomerge.checkAutoMerge(pr, config);
+      expect(res).toEqual({
+        automerged: false,
+        prAutomergeBlockReason: 'OffSchedule',
+      });
       expect(platform.mergePr).toHaveBeenCalledTimes(0);
     });
 
@@ -142,6 +146,7 @@ describe('workers/repository/update/pr/automerge', () => {
       const res = await prAutomerge.checkAutoMerge(pr, config);
       expect(res).toEqual({
         automerged: false,
+        branchStatus: 'yellow',
         prAutomergeBlockReason: 'BranchNotGreen',
       });
       expect(platform.mergePr).toHaveBeenCalledTimes(0);

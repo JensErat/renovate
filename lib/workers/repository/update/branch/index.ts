@@ -46,6 +46,7 @@ import { getCount, isLimitReached } from '../../../global/limits.ts';
 import type {
   BranchConfig,
   BranchResult,
+  PrAutomergeBlockReason,
   PrBlockedBy,
 } from '../../../types.ts';
 import { embedChangelogs } from '../../changelog/index.ts';
@@ -127,6 +128,7 @@ function userChangedTargetBranch(pr: Pr): boolean {
 export interface ProcessBranchResult {
   branchExists: boolean;
   updatesVerified?: boolean;
+  prAutomergeBlockReason?: PrAutomergeBlockReason;
   prBlockedBy?: PrBlockedBy;
   prNo?: number;
   result: BranchResult;
@@ -1159,17 +1161,39 @@ export async function processBranch(
         if (config.automerge) {
           logger.debug('PR is configured for automerge');
           // skip automerge if there is a new commit since status checks aren't done yet
-          // v8 ignore else -- TODO: add test #40625
           if (config.ignoreTests === true || !commitSha) {
             logger.debug('checking auto-merge');
             const prAutomergeResult = await checkAutoMerge(pr, config);
-            if (prAutomergeResult?.automerged) {
+            if (prAutomergeResult.automerged) {
               return {
                 branchExists,
                 result: 'automerged',
                 commitSha,
               };
             }
+            const { prAutomergeBlockReason } = prAutomergeResult;
+            if (prAutomergeBlockReason) {
+              logger.once.info(
+                {
+                  prNumber: pr.number,
+                  prTitle: pr.title,
+                  prAutomergeBlockReason,
+                  branchStatus: prAutomergeResult.branchStatus,
+                },
+                `PR #${pr.number} is configured for automerge but was not automerged`,
+              );
+              return {
+                branchExists,
+                prAutomergeBlockReason,
+                prNo: pr.number,
+                result: 'done',
+                commitSha,
+              };
+            }
+          } else {
+            logger.debug(
+              `Skipping automerge check for PR #${pr.number} because a commit was just pushed; checks must finish first`,
+            );
           }
         } else {
           logger.debug('PR is not configured for automerge');

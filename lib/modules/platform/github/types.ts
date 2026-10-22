@@ -23,6 +23,7 @@ export interface GhBranchStatus {
 export interface CombinedBranchStatus {
   state: CombinedBranchState;
   statuses: GhBranchStatus[];
+  total_count?: number;
 }
 
 export interface Comment {

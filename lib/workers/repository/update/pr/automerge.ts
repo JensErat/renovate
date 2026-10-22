@@ -8,23 +8,17 @@ import {
 import type { Pr } from '../../../../modules/platform/index.ts';
 import { platform } from '../../../../modules/platform/index.ts';
 import { scm } from '../../../../modules/platform/scm.ts';
-import type { BranchConfig } from '../../../types.ts';
+import type { BranchStatus } from '../../../../types/index.ts';
+import type { BranchConfig, PrAutomergeBlockReason } from '../../../types.ts';
 import { isScheduledNow } from '../branch/schedule.ts';
 import { resolveBranchStatus } from '../branch/status-checks.ts';
 
-export type PrAutomergeBlockReason =
-  | 'BranchModified'
-  | 'BranchNotGreen'
-  | 'Conflicted'
-  | 'DryRun'
-  | 'InMergeQueue'
-  | 'PlatformNotReady'
-  | 'PlatformRejection'
-  | 'off schedule';
+export type { PrAutomergeBlockReason } from '../../../types.ts';
 
 export interface AutomergePrResult {
   automerged: boolean;
   branchRemoved?: boolean;
+  branchStatus?: BranchStatus;
   prAutomergeBlockReason?: PrAutomergeBlockReason;
 }
 
@@ -48,7 +42,7 @@ export async function checkAutoMerge(
     logger.debug(`PR automerge is off schedule`);
     return {
       automerged: false,
-      prAutomergeBlockReason: 'off schedule',
+      prAutomergeBlockReason: 'OffSchedule',
     };
   }
   const mergeQueueEnabled =
@@ -90,6 +84,7 @@ export async function checkAutoMerge(
     );
     return {
       automerged: false,
+      branchStatus,
       prAutomergeBlockReason: 'BranchNotGreen',
     };
   }

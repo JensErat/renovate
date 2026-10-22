@@ -5,7 +5,10 @@ import type {
 } from '../../../config/types.ts';
 import type { PackageFile } from '../../../modules/manager/types.ts';
 import type { RepoInitConfig } from '../../../workers/repository/init/types.ts';
-import type { PrBlockedBy } from '../../../workers/types.ts';
+import type {
+  PrAutomergeBlockReason,
+  PrBlockedBy,
+} from '../../../workers/types.ts';
 
 export interface BaseBranchCache {
   revision?: number;
@@ -129,6 +132,10 @@ export interface BranchCache {
    * Dependency dashboard information
    */
   prBlockedBy?: PrBlockedBy;
+  /**
+   * Why a PR configured for automerge was not automerged on the last run
+   */
+  prAutomergeBlockReason?: PrAutomergeBlockReason;
   prTitle?: string;
   result?: string;
 }
